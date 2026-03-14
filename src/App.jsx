@@ -153,19 +153,15 @@ export default function App() {
             onEdit={(order) => { setEditOrder(order); setView("comanda"); }}
             onClose={async (id, accId, payments) => {
               try {
+                // Always close via PATCH first (backend handles status + account logic)
+                const closed = await ordersApi.close(id, accId);
                 if (payments && payments.length > 1) {
-                  // Split payment: update order with payments array
-                  const order = orders.find(o => o.id === id);
-                  const updated = await ordersApi.update(id, {
-                    ...order, status: "fechada", accountId: accId,
-                    payments, closedAt: new Date().toISOString(),
-                  });
-                  setOrders(orders.map(o => o.id === id ? updated : o));
+                  // Split payment: save payments array via update
+                  const withPayments = await ordersApi.update(id, { ...closed, payments });
+                  setOrders(orders.map(o => o.id === id ? withPayments : o));
                   showToast(`Comanda fechada! Dividida em ${payments.length} pagamentos`);
                 } else {
-                  const updated = await ordersApi.close(id, accId);
-                  // Preserve payments array in local state
-                  setOrders(orders.map(o => o.id === id ? { ...updated, payments } : o));
+                  setOrders(orders.map(o => o.id === id ? { ...closed, payments } : o));
                   showToast("Comanda fechada!");
                 }
               } catch (err) { showToast(err.message, "error"); }
