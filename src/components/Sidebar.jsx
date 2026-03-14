@@ -14,9 +14,10 @@ const Sidebar = ({ user, view, setView, onLogout, openOrders, lowStockCount, sho
     { id: "compras",   label: "Lista de Compras", icon: "cart", badge: shoppingCount || 0, badgeColor: T.pur },
     ...(isAdmin
       ? [
-          { id: "entrada",  label: "Entrada de Nota", icon: "nota" },
-          { id: "produtos", label: "Produtos",         icon: "tag" },
-          { id: "usuarios", label: "Usuários",         icon: "users" },
+          { id: "relatorios", label: "Relatórios",     icon: "print" },
+          { id: "entrada",    label: "Entrada de Nota", icon: "nota" },
+          { id: "produtos",   label: "Produtos",        icon: "tag" },
+          { id: "usuarios",   label: "Usuários",        icon: "users" },
         ]
       : []),
   ];
