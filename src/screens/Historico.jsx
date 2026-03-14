@@ -13,12 +13,16 @@ const Historico = ({ orders, accounts }) => {
 
   const filtered = closed.filter(
     (o) =>
-      (filterAcc === "all" || o.accountId === filterAcc) &&
+      (filterAcc === "all" || o.accountId === filterAcc ||
+        (o.payments || []).some(p => p.accountId === filterAcc)) &&
       (!filterDate ||
         new Date(o.closedAt).toLocaleDateString("pt-BR") ===
           new Date(filterDate + "T00:00:00").toLocaleDateString("pt-BR"))
   );
   const totalFiltered = filtered.reduce((s, o) => s + o.total, 0);
+
+  const getPayments = (o) => o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+  const hasDiscount = (o) => (o.discount > 0) || (o.items || []).some(i => (i.discount || 0) > 0);
 
   return (
     <div style={{ padding: 28 }} className="fade-in">
@@ -64,7 +68,10 @@ const Historico = ({ orders, accounts }) => {
           </div>
         )}
         {filtered.map((o, i) => {
-          const acc = accounts.find((a) => a.id === o.accountId);
+          const payments = getPayments(o);
+          const isSplit = payments.length > 1;
+          const firstAcc = accounts.find((a) => a.id === payments[0]?.accountId);
+          const hasObs = (o.items || []).some(it => it.obs);
           return (
             <div
               key={o.id}
@@ -81,7 +88,7 @@ const Historico = ({ orders, accounts }) => {
                   width: 38,
                   height: 38,
                   borderRadius: "50%",
-                  background: (acc?.color || T.amber) + "22",
+                  background: (isSplit ? T.blue : firstAcc?.color || T.amber) + "22",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -89,7 +96,7 @@ const Historico = ({ orders, accounts }) => {
                   flexShrink: 0,
                 }}
               >
-                {acc?.icon || "💳"}
+                {isSplit ? "➗" : firstAcc?.icon || "💳"}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>
@@ -99,14 +106,41 @@ const Historico = ({ orders, accounts }) => {
                   {fmtDate(o.closedAt || o.createdAt)} • Atendente: {o.attendantName}
                 </div>
                 <div style={{ fontSize: 11, color: T.txtS, marginTop: 2 }}>
-                  {o.items.map((i) => `${i.qty}x ${i.name}`).join(", ")}
+                  {o.items.map((it) => {
+                    let label = `${it.qty}x ${it.name}`;
+                    if ((it.discount || 0) > 0) label += ` (−${it.discount}%)`;
+                    return label;
+                  }).join(", ")}
                 </div>
+                {(hasDiscount(o) || hasObs) && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
+                    {hasDiscount(o) && (
+                      <span style={{ fontSize: 10, color: T.pur }}>
+                        {o.discount > 0 ? `Desc. ${o.discount}%` : "Desc. itens"}
+                        {o.subtotal > 0 && ` (de ${fmt(o.subtotal)})`}
+                      </span>
+                    )}
+                    {hasObs && <span style={{ fontSize: 10, color: T.amber }}>📝 obs.</span>}
+                  </div>
+                )}
+                {isSplit && (
+                  <div style={{ fontSize: 10, color: T.blue, marginTop: 3 }}>
+                    Dividido: {payments.map(p => {
+                      const a = accounts.find(ac => ac.id === p.accountId);
+                      return `${a?.icon || "💳"} ${fmt(p.amount)}`;
+                    }).join(" • ")}
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: acc?.color || T.grn }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: firstAcc?.color || T.grn }}>
                   {fmt(o.total)}
                 </div>
-                <div style={{ fontSize: 11, color: T.txtM, marginTop: 2 }}>{acc?.name || "—"}</div>
+                {isSplit ? (
+                  <div style={{ fontSize: 11, color: T.blue }}>Dividido</div>
+                ) : (
+                  <div style={{ fontSize: 11, color: T.txtM }}>{firstAcc?.name || "—"}</div>
+                )}
               </div>
             </div>
           );

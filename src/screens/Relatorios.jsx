@@ -119,7 +119,13 @@ const Relatorios = ({ orders, accounts, purchases, stock, shoppingList }) => {
     y = pdfSectionTitle(doc, "Resumo por Forma de Pagamento", y);
     const byAcc = {};
     accounts.forEach(a => { byAcc[a.id] = { name: a.name, icon: a.icon, total: 0, count: 0 }; });
-    closed.forEach(o => { if (byAcc[o.accountId]) { byAcc[o.accountId].total += o.total; byAcc[o.accountId].count++; } });
+    closed.forEach(o => {
+      const payments = o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+      payments.forEach(p => { if (byAcc[p.accountId]) { byAcc[p.accountId].total += p.amount; } });
+      // Count the order once for the primary account
+      if (byAcc[o.accountId]) byAcc[o.accountId].count++;
+      else if (payments.length > 0 && byAcc[payments[0].accountId]) byAcc[payments[0].accountId].count++;
+    });
     const grandTotal = closed.reduce((s, o) => s + o.total, 0);
 
     doc.autoTable({
@@ -155,16 +161,21 @@ const Relatorios = ({ orders, accounts, purchases, stock, shoppingList }) => {
       doc.autoTable({
         startY: y,
         margin: { left: 10, right: 10 },
-        head: [["Data/Hora", "Mesa", "Cliente", "Atendente", "Itens", "Pagamento", "Total"]],
+        head: [["Data/Hora", "Mesa", "Cliente", "Atendente", "Itens", "Pagamento", "Desc.", "Total"]],
         body: closed.map(o => {
-          const acc = accounts.find(a => a.id === o.accountId);
+          const payments = o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+          const payLabel = payments.length > 1
+            ? payments.map(p => { const a = accounts.find(ac => ac.id === p.accountId); return `${a?.name || "—"}: ${fmtR(p.amount)}`; }).join(" / ")
+            : (accounts.find(a => a.id === o.accountId)?.name || "—");
+          const hasDisc = (o.discount > 0) || (o.items || []).some(i => (i.discount || 0) > 0);
           return [
             fmtDR(o.closedAt || o.createdAt),
             o.table,
             o.clientName || "—",
             o.attendantName,
-            o.items.map(i => `${i.qty}x ${i.name}`).join(", "),
-            acc?.name || "—",
+            o.items.map(i => { let s = `${i.qty}x ${i.name}`; if (i.obs) s += ` (${i.obs})`; return s; }).join(", "),
+            payLabel,
+            hasDisc ? (o.discount > 0 ? `${o.discount}%` : "Sim") : "—",
             fmtR(o.total),
           ];
         }),
@@ -173,9 +184,10 @@ const Relatorios = ({ orders, accounts, purchases, stock, shoppingList }) => {
         alternateRowStyles: { fillColor: PDF_COLORS.rowAlt },
         styles: { cellPadding: 2, overflow: "linebreak" },
         columnStyles: {
-          0: { cellWidth: 24 }, 1: { cellWidth: 14 }, 2: { cellWidth: 24 },
-          3: { cellWidth: 24 }, 4: { cellWidth: 50, fontSize: 6.5 },
-          5: { cellWidth: 22 }, 6: { halign: "right", fontStyle: "bold", cellWidth: 22 },
+          0: { cellWidth: 22 }, 1: { cellWidth: 12 }, 2: { cellWidth: 20 },
+          3: { cellWidth: 20 }, 4: { cellWidth: 40, fontSize: 6.5 },
+          5: { cellWidth: 30, fontSize: 6.5 }, 6: { cellWidth: 14, halign: "center" },
+          7: { halign: "right", fontStyle: "bold", cellWidth: 20 },
         },
       });
     }
@@ -288,7 +300,10 @@ const Relatorios = ({ orders, accounts, purchases, stock, shoppingList }) => {
     const fmtR = n => "R$ " + Number(n).toFixed(2).replace(".", ",");
     const fmtDR = s => new Date(s).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
 
-    const calcSales = accId => orders.filter(o => o.status === "fechada" && o.accountId === accId).reduce((s, o) => s + o.total, 0);
+    const calcSales = accId => orders.filter(o => o.status === "fechada").reduce((s, o) => {
+      const payments = o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+      return s + payments.filter(p => p.accountId === accId).reduce((ps, p) => ps + p.amount, 0);
+    }, 0);
     const calcPurchases = accId => purchases.filter(p => p.accountId === accId).reduce((s, p) => s + p.amount, 0);
     const calcBalance = acc => (acc.initialBalance || 0) + calcSales(acc.id) - calcPurchases(acc.id);
 
