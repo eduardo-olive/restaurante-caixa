@@ -14,7 +14,10 @@ const Contas = ({ accounts, orders, purchases, isAdmin, onAddAccount, onDeleteAc
   const [initBal, setInitBal] = useState("0");
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
-  const calcSales     = (accId) => orders.filter((o) => o.status === "fechada" && o.accountId === accId).reduce((s, o) => s + o.total, 0);
+  const getPayments = (o) => o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+  const calcSales     = (accId) => orders.filter((o) => o.status === "fechada").reduce((s, o) => {
+    return s + getPayments(o).filter(p => p.accountId === accId).reduce((ps, p) => ps + p.amount, 0);
+  }, 0);
   const calcPurchases = (accId) => purchases.filter((p) => p.accountId === accId).reduce((s, p) => s + p.amount, 0);
   const calcBalance   = (acc)   => (acc.initialBalance || 0) + calcSales(acc.id) - calcPurchases(acc.id);
   const totalGeral    = accounts.reduce((s, a) => s + calcBalance(a), 0);

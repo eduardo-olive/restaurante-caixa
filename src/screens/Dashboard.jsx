@@ -8,14 +8,18 @@ const Dashboard = ({ orders, accounts, purchases, user, setView }) => {
   );
   const totalHoje = todayOrders.reduce((s, o) => s + o.total, 0);
   const openCount = orders.filter((o) => o.status === "aberta").length;
+  const getPayments = (o) => o.payments || (o.accountId ? [{ accountId: o.accountId, amount: o.total }] : []);
+
   const byAccount = todayOrders.reduce((a, o) => {
-    a[o.accountId] = (a[o.accountId] || 0) + o.total;
+    getPayments(o).forEach(p => { a[p.accountId] = (a[p.accountId] || 0) + p.amount; });
     return a;
   }, {});
 
   const calcAccBal = (acc) =>
     (acc.initialBalance || 0) +
-    orders.filter((o) => o.status === "fechada" && o.accountId === acc.id).reduce((s, o) => s + o.total, 0) -
+    orders.filter((o) => o.status === "fechada").reduce((s, o) => {
+      return s + getPayments(o).filter(p => p.accountId === acc.id).reduce((ps, p) => ps + p.amount, 0);
+    }, 0) -
     purchases.filter((p) => p.accountId === acc.id).reduce((s, p) => s + p.amount, 0);
   const saldoTotal = accounts.reduce((s, a) => s + calcAccBal(a), 0);
 
@@ -186,7 +190,9 @@ const Dashboard = ({ orders, accounts, purchases, user, setView }) => {
             </button>
           </div>
           {recentClosed.map((o, i) => {
-            const acc = accounts.find((a) => a.id === o.accountId);
+            const payments = getPayments(o);
+            const isSplit = payments.length > 1;
+            const firstAcc = accounts.find((a) => a.id === payments[0]?.accountId);
             return (
               <div
                 key={o.id}
@@ -203,7 +209,7 @@ const Dashboard = ({ orders, accounts, purchases, user, setView }) => {
                     width: 34,
                     height: 34,
                     borderRadius: "50%",
-                    background: (acc?.color || T.amber) + "22",
+                    background: (isSplit ? T.blue : firstAcc?.color || T.amber) + "22",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -211,7 +217,7 @@ const Dashboard = ({ orders, accounts, purchases, user, setView }) => {
                     flexShrink: 0,
                   }}
                 >
-                  {acc?.icon || "💳"}
+                  {isSplit ? "➗" : firstAcc?.icon || "💳"}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>
@@ -220,12 +226,24 @@ const Dashboard = ({ orders, accounts, purchases, user, setView }) => {
                   <div style={{ fontSize: 11, color: T.txtS }}>
                     {fmtDate(o.closedAt || o.createdAt)} • {o.attendantName}
                   </div>
+                  {isSplit && (
+                    <div style={{ fontSize: 10, color: T.blue, marginTop: 2 }}>
+                      {payments.map(p => {
+                        const a = accounts.find(ac => ac.id === p.accountId);
+                        return `${a?.icon || "💳"} ${fmt(p.amount)}`;
+                      }).join(" • ")}
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign: "right", flexShrink: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: acc?.color || T.grn }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: firstAcc?.color || T.grn }}>
                     {fmt(o.total)}
                   </div>
-                  <div style={{ fontSize: 11, color: T.txtM }}>{acc?.name || "—"}</div>
+                  {isSplit ? (
+                    <div style={{ fontSize: 11, color: T.blue }}>Dividido</div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: T.txtM }}>{firstAcc?.name || "—"}</div>
+                  )}
                 </div>
               </div>
             );
